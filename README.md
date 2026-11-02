@@ -1,44 +1,69 @@
 # email-organisation-and-automation-using-python-
-A Python automation script that cleans up a Gmail inbox. It finds promotional and newsletter emails by subject keywords and moves them into a separate folder.
 
-Features
+import imaplib
 
-Connects securely to Gmail using IMAP over SSL
-Checks that the target folder exists before running
-Searches email subjects for the keywords: unsubscribe, newsletter, sale, promotion
-Moves matching emails to the promotion folder and removes them from the inbox
-Avoids duplicates: an email matching more than one keyword is moved only once
-Prints progress and the total number of emails moved
-Handles IMAP and general errors with troubleshooting tips
+# --- Configuration ---
+EMAIL = "your_email@gmail.com"
+PASSWORD = "your_app_password"  # Use a Gmail App Password
+IMAP_SERVER = "imap.gmail.com"
+FOLDER_TARGET = "promotion"  # Make sure this folder/label exists in Gmail
 
-Technologies Used
+try:
+    # --- Connect to mailbox ---
+    print("Connecting to Gmail server...")
+    mail = imaplib.IMAP4_SSL(IMAP_SERVER)
+    mail.login(EMAIL, PASSWORD)
+    print("Login successful!")
 
-Python
-imaplib (Python standard library)
-IMAP protocol
+    # Check if target folder exists
+    status, folders = mail.list()
+    if FOLDER_TARGET not in str(folders):
+        print(f"Error: Folder '{FOLDER_TARGET}' doesn't exist in your Gmail!")
+        print("Please create it in Gmail first.")
+        mail.logout()
+        exit()
 
-How It Works
+    mail.select("inbox")
+    print("Inbox selected")
 
-Connects to Gmail's IMAP server and logs in
-Checks that the promotion folder exists
-Selects the inbox
-Searches subjects for each keyword
-Copies each matching email to the promotion folder, then marks the original as deleted
-Clears the marked originals, logs out, and prints the total moved
+    # --- Search for newsletters/promotions ---
+    keywords = ["unsubscribe", "newsletter", "sale", "promotion"]
+    moved_count = 0
+    processed = set()
 
-Setup
+    for keyword in keywords:
+        print(f"Searching for: {keyword}")
+        status, messages = mail.search(None, f'(SUBJECT "{keyword}")')
 
-Enable IMAP in Gmail: Settings > See all settings > Forwarding and POP/IMAP
-Turn on 2-Step Verification in your Google Account
-Generate an App Password in your Google Account security settings
-Create a label named promotion in Gmail
-Open Email_automation.py and replace EMAIL and PASSWORD with your email address and app password
+        if status == "OK" and messages[0]:
+            email_ids = messages[0].split()
+            print(f"   Found {len(email_ids)} emails with '{keyword}' in subject")
 
-Run the script:
+            for email_id in email_ids:
+                if email_id in processed:
+                    continue
+                # Move email: copy to target folder, then mark original deleted
+                mail.copy(email_id, FOLDER_TARGET)
+                mail.store(email_id, "+FLAGS", "\\Deleted")
+                processed.add(email_id)
+                moved_count += 1
+        else:
+            print(f"   No emails found with '{keyword}' in subject")
 
-python Email_automation.py
+    # --- Cleanup ---
+    mail.expunge()
+    mail.logout()
+    print(f"Cleanup complete! {moved_count} promotional emails moved to '{FOLDER_TARGET}'.")
 
-OUTPUT :
+except imaplib.IMAP4.error as e:
+    print(f"IMAP Error: {e}")
+    print("\nTroubleshooting tips:")
+    print("1. Make sure you generated an APP PASSWORD (not your regular password)")
+    print("2. Enable IMAP in Gmail Settings > See all settings > Forwarding and POP/IMAP")
+    print("3. Enable 2-Step Verification in Google Account security settings")
 
-Example Output
-Connecting to Gmail server... Login successful! Inbox selected Searching for: unsubscribe Found 12 emails with 'unsubscribe' in subject Searching for: newsletter Found 8 emails with 'newsletter' in subject Cleanup complete! 20 promotional emails moved to 'promotion'. Script execution finished
+except Exception as e:
+    print(f"Unexpected error: {e}")
+
+finally:
+    print("Script execution finished")
